@@ -1,7 +1,6 @@
 import pygame
 import sys
 import numpy as np
-
 import random
 import math
 
@@ -11,10 +10,18 @@ class Neuron:
         self.bias = random.uniform(-1, 1)
         self.output = 0.0
 
+        self.last_bias_change = 0.0  # For homeostatic regulation
+        self.last_weight_changes = [0.0 for _ in range(n_inputs)] # For homeostatic regulation
+
     def activate(self, inputs):
         s = sum(w * i for w, i in zip(self.weights, inputs)) + self.bias
         self.output = math.tanh(s)
         return self.output
+    
+    def undo_changes(self):
+        self.bias -= self.last_bias_change
+        for i in range(len(self.weights)):
+            self.weights[i] -= self.last_weight_changes[i]
 
 class Layer:
     def __init__(self, n_neurons, n_inputs):
@@ -28,18 +35,35 @@ class SimpleNN:
         self.hidden = Layer(n_hidden, n_inputs)
         self.output = Layer(n_outputs, n_hidden)
 
+        self.last_score_mean = 0.0
+
     def forward(self, inputs):
         h = self.hidden.forward(inputs)
         return self.output.forward(h)
+    
+    def mutate(self, score, threshold=0.9):
+        if score >= threshold:
+            return # No mutation if performance is good
+        
+        if score < self.last_score_mean:
+            # Revert last changes
+            for n in self.hidden.neurons + self.output.neurons:
+                n.undo_changes()
+        
+        mutation_rate = 0.4 * (1 - score)
+        mutation_amount = 0.5 * (1 - score)
 
-    def mutate(self, rate=0.1):
-        """Tiny random weight changes to simulate adaptation."""
-        for layer in [self.hidden, self.output]:
-            for n in layer.neurons:
-                for i in range(len(n.weights)):
-                    n.weights[i] += random.uniform(-rate, rate)
-                n.bias += random.uniform(-rate, rate)
+        for n in self.hidden.neurons + self.output.neurons:
+            for i in range(len(n.weights)):
+                if random.random() < mutation_rate:
+                    n.last_weight_changes[i] = random.uniform(-mutation_amount, mutation_amount)
+                    n.weights[i] += n.last_weight_changes[i]    
+            if random.random() < mutation_rate:
+                n.last_bias_change = random.uniform(-mutation_amount, mutation_amount)
+                n.bias += n.last_bias_change
 
+        self.last_score_mean = score
+        
 
 class Pendulum:
     def __init__(self, l=2, g=9.81, dt=0.02):
@@ -68,6 +92,8 @@ class Pendulum:
 
         self.x_base_dot += self.base_acc * self.dt
         self.x_base += self.base_acc * self.dt
+
+        self.x_base = np.clip(self.x_base, -3, 3)
 
         # Pendulum angular acceleration
         theta_ddot = (self.g / self.l) * np.sin(self.theta) + (self.base_acc / self.l) * np.cos(self.theta)
@@ -102,6 +128,16 @@ class Pendulum:
         # Draw tip
         pygame.draw.circle(screen, (255, 0, 0), (tip_x, tip_y), 8)
 
+    def get_score(self):
+        """Return score based on pendulum angle (closer to upright is better)."""
+        score = np.cos(self.theta)
+
+        # penalize being too far from center
+        score -= 0.1 * abs(self.x_base)
+
+        # penalize high angular velocity
+        score -= 0.5 * abs(self.theta_dot)
+        return score
 
 
 # Initialize pygame
@@ -121,10 +157,14 @@ running = True
 
 pendulum = Pendulum()
 
+nn = SimpleNN(n_inputs=4, n_hidden=4, n_outputs=1)
+
+frame_count = 0
+score_accum = 0.0
 
 while running:
     # Cap the frame rate at 60 FPS
-    clock.tick(75)
+    clock.tick(150)
     # Handle events
     for event in pygame.event.get():
         if event.type == pygame.KEYDOWN:
@@ -145,8 +185,28 @@ while running:
     delta_time = clock.get_time() / 1000.0  # Convert milliseconds to seconds
 
     # Update pendulum
-    pendulum.step()
+    data = pendulum.step()
     
+    
+    score = pendulum.get_score()
+    score_accum += score
+    frame_count += 1
+
+    if frame_count >= 75:
+        score_mean = score_accum / frame_count
+        print(f"Score: {score_mean:.4f}")
+        nn.mutate(score_mean)
+        frame_count = 0
+        score_accum = 0.0
+
+    # Neural network forward pass
+    nn_output = nn.forward(data)
+    pendulum.base_acc = nn_output[0]
+
+    
+
+    
+
     # Fill the screen with white
     screen.fill(WHITE)
     # Draw pendulum
