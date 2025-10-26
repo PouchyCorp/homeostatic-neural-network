@@ -11,7 +11,6 @@ pygame.display.set_caption("Homeostatic Neural Network")
 
 # Colors
 WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
 
 # Main game loop
 clock = pygame.time.Clock()
