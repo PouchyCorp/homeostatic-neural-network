@@ -74,9 +74,10 @@ def draw_nn(surface, nn, origin, layer_spacing=200, neuron_spacing=40):
             hx, hy = hidden_pos[i_h]
             pygame.draw.line(surface, col, (ix+40, iy+6), (hx-8, hy), max(1, int(1 + abs(w)*2)))
 
-def draw_text_info(surface, frame_count, error, output):
+def draw_text_info(surface, frame_count, error, input, output):
     lines = [
         f"Frame: {frame_count}",
+        f"Inputs: [{input[0]:.4f}, {input[1]:.4f}]",
         f"Outputs: [{output[0]:.4f}, {output[1]:.4f}]",
         f"Error: {error:.4f}",
     ]

@@ -230,7 +230,7 @@ while running:
     draw_scene(screen, point, target)
     
     render.draw_nn(screen, nn, (500, 50))
-    render.draw_text_info(screen, frame_count, error, nn_outputs)
+    render.draw_text_info(screen, frame_count, error, nn_inputs, nn_outputs)
 
     # draw UI buttons
     adapt_label = "Adaptation: ON" if adapt_enabled else "Adaptation: OFF"
