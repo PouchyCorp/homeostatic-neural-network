@@ -5,7 +5,7 @@ import random
 import math
 
 class Neuron:
-    def __init__(self, n_inputs, mutation_step=0.10):
+    def __init__(self, n_inputs, mutation_step=0.01):
         self.weights = [random.uniform(-1, 1) for _ in range(n_inputs)]
         self.bias = random.uniform(-1, 1)
         self.output = 0.0
@@ -90,45 +90,41 @@ class SimpleNN:
         for neuron in self.hidden.neurons + self.output.neurons:
             neuron.adapt(error)
 
-    def get_error(self, left_sensor, right_sensor, target):
-        total_light = left_sensor + right_sensor
-        return total_light - target
+    def get_error(self, point, target):
+        return math.hypot(point[0]-target[0], point[1]-target[1])
 
+point = [0.0, 0.0]
+target = [100.0, 100.0]
 
+def draw_scene(surface, point, target):
+    surface.fill((20,20,20))
+    pygame.draw.circle(surface, (200,200,50), (int(point[0]), int(point[1])), 10)
+    pygame.draw.circle(surface, (50,200,50), (int(target[0]), int(target[1])), 8)
 
 # Initialize pygame
 pygame.init()
 
 # Set up display
-WIDTH, HEIGHT = 1920, 1080
+WIDTH, HEIGHT = 800, 600
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Homeostatic Neural Network")
-
-from light import Light
-import render
-from car import Car
 
 # Main game loop
 clock = pygame.time.Clock()
 running = True
 
-nn = SimpleNN(n_inputs=2, n_hidden=3, n_outputs=1)
+nn = SimpleNN(n_inputs=2, n_hidden=3, n_outputs=2)
+
+import render
 
 frame_count = 0
 score_accum = 0.0
 
-car = Car()
-car.velocity = 2.0  # Set a constant velocity for the car
-car.xy = (WIDTH//2 + 10, HEIGHT//2)
-
-light = Light((WIDTH//2 - 100, HEIGHT//2), intensity=200.0)
-
-target = 0.5  # Target illumination level
 previous_error = 0.0
 error_accum = 0.0
 error = 0.0
 
-iteration_rate = 50  # Adjust every X frames
+iteration_rate = 1  # Adjust every X frames
 while running:  
     # Cap the frame rate at 60 FPS
     clock.tick(150)
@@ -142,36 +138,29 @@ while running:
             running = False
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             running = False
+
+    nn_inputs = [
+        (target[0] - point[0]) / WIDTH,
+        (target[1] - point[1]) / HEIGHT
+    ]
+    nn_outputs = nn.forward(nn_inputs)
+
+    # clamp outputs to 0, 1
+    nn_outputs = [np.clip(o, 0, 1) for o in nn_outputs]
+
+    point[0] = WIDTH * nn_outputs[0]
+    point[1] = HEIGHT * nn_outputs[1]
+
+    error = nn.get_error(point, target)
+    error_accum += error
+    # every iteration_rate frames, adjust weights
+    if frame_count % iteration_rate == 0:
+        avg_error = error_accum / iteration_rate
+        nn.homeostatic_adjustment(avg_error)
+        error_accum = 0.0
+    draw_scene(screen, point, target)
     
     render.draw_nn(screen, nn, (500, 50))
-
-    #car.theta += 4 * dt  # Slowly rotate the car
-    # Update the car's position
-    car.tick()
-
-    # Get sensor data
-    
-    left_sensor, right_sensor = car.get_sensor_data([light])
-    sensor_data = [left_sensor, right_sensor]
-    nn_outputs = nn.forward(sensor_data)
-    error = nn.get_error(left_sensor, right_sensor, target)
-    error_accum += error
-
-    car.theta += nn_outputs[0] * 0.05  # Adjust car's angle based on NN output
-
-    if frame_count % iteration_rate == 0:
-        error_avg = error_accum / iteration_rate
-        error_accum = 0.0
-        nn.homeostatic_adjustment(error_avg)
-
-    
-    # Draw the car
-    car.draw(screen)
-    # Draw the light
-    light.draw(screen, car)
-    # Draw info
-    render.draw_text_info(screen, nn, frame_count, left_sensor + right_sensor,
-                           target, nn_outputs[0], left_sensor, right_sensor, error)
     # Update the display
     pygame.display.flip()
 
