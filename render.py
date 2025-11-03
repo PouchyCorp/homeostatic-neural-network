@@ -2,6 +2,16 @@ import pygame
 pygame.font.init()
 FONT_SMALL = pygame.font.SysFont("Arial", 14)
 
+def draw_button(surface, rect, text, bg=(60,60,60), fg=(240,240,240)):
+    """Draw a simple rectangular button with centered text."""
+    pygame.draw.rect(surface, bg, rect, border_radius=4)
+    # border
+    pygame.draw.rect(surface, (100,100,100), rect, width=1, border_radius=4)
+    text_surf = FONT_SMALL.render(text, True, fg)
+    tx = rect.x + (rect.width - text_surf.get_width()) // 2
+    ty = rect.y + (rect.height - text_surf.get_height()) // 2
+    surface.blit(text_surf, (tx, ty))
+
 def map_color_for_weight(w):
     # green for positive, red for negative, intensity by magnitude
     mag = min(abs(w), 1.5)
@@ -64,14 +74,10 @@ def draw_nn(surface, nn, origin, layer_spacing=200, neuron_spacing=40):
             hx, hy = hidden_pos[i_h]
             pygame.draw.line(surface, col, (ix+40, iy+6), (hx-8, hy), max(1, int(1 + abs(w)*2)))
 
-def draw_text_info(surface, nn, frame_count, illumination, target_illumination, car_steering, left_sensor, right_sensor, error):
+def draw_text_info(surface, frame_count, error, output):
     lines = [
         f"Frame: {frame_count}",
-        f"Illumination: {illumination:.2f}",
-        f"Target Illumination: {target_illumination:.2f}",
-        f"Car Steering Adjustment: {car_steering:.2f} (nn output)",
-        f"Left Sensor: {left_sensor:.2f}",
-        f"Right Sensor: {right_sensor:.2f}",
+        f"Outputs: [{output[0]:.4f}, {output[1]:.4f}]",
         f"Error: {error:.4f}",
     ]
     for i, line in enumerate(lines):
