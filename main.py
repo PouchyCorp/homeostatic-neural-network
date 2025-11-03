@@ -5,9 +5,9 @@ import random
 import math
 
 class Neuron:
-    def __init__(self, n_inputs, mutation_step=0.01, improvement_tolerance=1.0):
-        self.weights = [random.uniform(-1, 1) for _ in range(n_inputs)]
-        self.bias = random.uniform(-1, 1)
+    def __init__(self, n_inputs, mutation_step=0.005, improvement_tolerance=1.0):
+        self.weights = [random.uniform(-0.5, 0.5) for _ in range(n_inputs)]
+        self.bias = random.uniform(-0.5, 0.5)
         self.output = 0.0
         
         self.mutation_step = mutation_step
@@ -57,10 +57,10 @@ class Neuron:
 
         self.last_mutation = None
 
-    def adapt(self, error):
+    def adapt(self, error, target_threshold=0.1):
         """Ashby-style reversible homeostasis."""
         # first iteration: no previous error to compare
-        if error < 5:
+        if error < target_threshold:
             return  # no adaptation needed for low error
 
         if self.prev_error is None:
@@ -144,20 +144,19 @@ nn = SimpleNN(n_inputs=2, n_hidden=3, n_outputs=2)
 
 import render
 
-# UI state: input offsets and swap toggle
-input_offsets = [0.0, 0.0]
+# UI state: output offsets and swap toggle (inputs are unused)
+output_offsets = [0.0, 0.0]
 const_step = 0.05
-swap_inputs = False
+swap_outputs = False
 # toggle to enable/disable homeostatic adaptation
 adapt_enabled = True
 
 # Button layout (created after we know WIDTH/HEIGHT)
 btn_w, btn_h = 140, 28
 buttons = {
-    'pause_adapt': pygame.Rect(20, HEIGHT - 150, btn_w, btn_h),
-    'add_left': pygame.Rect(20, HEIGHT - 110, btn_w, btn_h),
-    'add_right': pygame.Rect(20, HEIGHT - 70, btn_w, btn_h),
-    'swap': pygame.Rect(20, HEIGHT - 40, btn_w, btn_h),
+    'add_out0': pygame.Rect(20, HEIGHT - 110, btn_w, btn_h),
+    'add_out1': pygame.Rect(20, HEIGHT - 70, btn_w, btn_h),
+    'swap_outputs': pygame.Rect(20, HEIGHT - 40, btn_w, btn_h),
 }
 
 frame_count = 0
@@ -188,39 +187,34 @@ while running:
         elif event.type == pygame.MOUSEBUTTONDOWN:
             mx, my = pygame.mouse.get_pos()
             # check UI buttons first
-            if buttons['pause_adapt'].collidepoint(mx, my):
-                adapt_enabled = not adapt_enabled
-            elif buttons['add_left'].collidepoint(mx, my):
-                input_offsets[0] += const_step
-            elif buttons['add_right'].collidepoint(mx, my):
-                input_offsets[1] += const_step
-            elif buttons['swap'].collidepoint(mx, my):
-                swap_inputs = not swap_inputs
+            if buttons['add_out0'].collidepoint(mx, my):
+                output_offsets[0] += const_step
+            elif buttons['add_out1'].collidepoint(mx, my):
+                output_offsets[1] += const_step
+            elif buttons['swap_outputs'].collidepoint(mx, my):
+                swap_outputs = not swap_outputs
             else:
                 # otherwise set the target position to mouse
                 target[0] = mx
                 target[1] = my
         
 
-    # base inputs are normalized target coordinates, plus any user offsets
-    nn_inputs = [
-        target[0] / WIDTH + input_offsets[0],
-        target[1] / HEIGHT + input_offsets[1]
-    ]
+    # inputs are irrelevant for this agent; get base outputs and apply perturbations
+    base_inputs = [0.0, 0.0]
+    raw_nn_output = nn.forward(base_inputs)
 
-    # optionally swap both inputs
-    if swap_inputs:
-        nn_inputs = [nn_inputs[1], nn_inputs[0]]
+    # apply user offsets to outputs
+    offset_nn_outputs = [raw_nn_output[0] + output_offsets[0], raw_nn_output[1] + output_offsets[1]]
 
-    # clamp inputs to [0,1]
-    nn_inputs = [float(np.clip(i, 0.0, 1.0)) for i in nn_inputs]
-    nn_outputs = nn.forward(nn_inputs)
+    # optionally swap both outputs
+    if swap_outputs:
+        offset_nn_outputs = [offset_nn_outputs[1], offset_nn_outputs[0]]
 
     # clamp outputs to 0, 1
-    nn_outputs = [np.clip(o, 0, 1) for o in nn_outputs]
+    #offset_nn_outputs = [np.clip(o, 0, 1) for o in offset_nn_outputs]
 
-    point[0] = WIDTH * nn_outputs[0]
-    point[1] = HEIGHT * nn_outputs[1]
+    point[0] = WIDTH * offset_nn_outputs[0]
+    point[1] = HEIGHT * offset_nn_outputs[1]
 
     error = nn.get_error(point, target)
     # every iteration_rate frames, adjust weights (if adaptation enabled)
@@ -230,18 +224,16 @@ while running:
     draw_scene(screen, point, target)
     
     render.draw_nn(screen, nn, (500, 50))
-    render.draw_text_info(screen, frame_count, error, nn_inputs, nn_outputs)
+    render.draw_text_info(screen, frame_count, error, point, target, raw_nn_output, [target[0]/WIDTH, target[1]/HEIGHT])
 
     # draw UI buttons
-    adapt_label = "Adaptation: ON" if adapt_enabled else "Adaptation: OFF"
-    render.draw_button(screen, buttons['pause_adapt'], adapt_label, bg=(60,120,60) if adapt_enabled else (120,60,60))
-    render.draw_button(screen, buttons['add_left'], f"Add +{const_step:.2f} to Left")
-    render.draw_button(screen, buttons['add_right'], f"Add +{const_step:.2f} to Right")
-    swap_label = "Swap Inputs: ON" if swap_inputs else "Swap Inputs: OFF"
-    render.draw_button(screen, buttons['swap'], swap_label, bg=(80,80,100) if swap_inputs else (60,60,60))
+    render.draw_button(screen, buttons['add_out0'], f"Add +{const_step:.2f} to Out0")
+    render.draw_button(screen, buttons['add_out1'], f"Add +{const_step:.2f} to Out1")
+    swap_label = "Swap Outputs: ON" if swap_outputs else "Swap Outputs: OFF"
+    render.draw_button(screen, buttons['swap_outputs'], swap_label, bg=(80,80,100) if swap_outputs else (60,60,60))
 
     # draw offset status
-    ofs_text = f"Offsets L={input_offsets[0]:.2f}  R={input_offsets[1]:.2f}"
+    ofs_text = f"Out offsets 0={output_offsets[0]:.2f}  1={output_offsets[1]:.2f}"
     ofs_surf = render.FONT_SMALL.render(ofs_text, True, (240,240,240))
     screen.blit(ofs_surf, (20 + btn_w + 10, HEIGHT - 90))
     # Update the display

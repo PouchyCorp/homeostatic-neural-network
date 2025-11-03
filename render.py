@@ -58,28 +58,16 @@ def draw_nn(surface, nn, origin, layer_spacing=200, neuron_spacing=40):
             width = max(1, int(1 + abs(w) * 3))
             pygame.draw.line(surface, col, (hx+8,hy), (ox-8,oy), width)
 
-    # draw input->hidden weights as smaller lines with a background label
-    # we won't draw individual input nodes, just small glyphs
-    # label inputs
-    input_labels = ["Left Sensor", "Right Sensor"]
-    for i_in, label in enumerate(input_labels):
-        ix = x0 - 80
-        iy = y0 + i_in * neuron_spacing
-        color = (220,220,220)
-        surface.blit(FONT_SMALL.render(label, True, (240,240,240)), (ix-10, iy-8))
-        # draw small lines to each hidden neuron scaled by each neuron's weight
-        for i_h, h_neu in enumerate(nn.hidden.neurons):
-            w = h_neu.weights[i_in]
-            col = map_color_for_weight(w)
-            hx, hy = hidden_pos[i_h]
-            pygame.draw.line(surface, col, (ix+40, iy+6), (hx-8, hy), max(1, int(1 + abs(w)*2)))
+    # input nodes are not shown — this visualization focuses on hidden/output layers
 
-def draw_text_info(surface, frame_count, error, input, output):
+def draw_text_info(surface, frame_count, error, output, target, nn_outputs, normalized_target):
     lines = [
         f"Frame: {frame_count}",
-        f"Inputs: [{input[0]:.4f}, {input[1]:.4f}]",
         f"Outputs: [{output[0]:.4f}, {output[1]:.4f}]",
+        f"Target: [{target[0]:.4f}, {target[1]:.4f}]",
         f"Error: {error:.4f}",
+        f"NN Outputs: [{nn_outputs[0]:.4f}, {nn_outputs[1]:.4f}]",
+        f"Normalized Target: [{normalized_target[0]:.4f}, {normalized_target[1]:.4f}]",
     ]
     for i, line in enumerate(lines):
         text_surf = FONT_SMALL.render(line, True, (240,240,240))
