@@ -32,20 +32,34 @@ def draw_nn(surface, nn, origin, layer_spacing=200, neuron_spacing=40):
         x = x0 + 50
         y = y0 + i * neuron_spacing
         hidden_pos.append((x, y))
-        pygame.draw.circle(surface, (200,200,200), (x,y), 10)
+        radius = 16
+        col = (200,200,200) if not getattr(neuron, 'blocked', False) else (140,80,80)
+        pygame.draw.circle(surface, col, (x,y), radius)
+        # draw blocked marker
+        if getattr(neuron, 'blocked', False):
+            pygame.draw.circle(surface, (255,50,50), (x,y), radius-6, width=2)
         # draw bias number
-        bias_text = FONT_SMALL.render(f"{neuron.bias:.2f}", True, (240,240,240))
-        surface.blit(bias_text, (x - bias_text.get_width()//2, y))
+        bias_text = FONT_SMALL.render(f"{neuron.bias:.2f}", True, (40,40,40))
+        surface.blit(bias_text, (x - bias_text.get_width()//2, y - bias_text.get_height()//2))
+        
     # output layer
     output_pos = []
     for i, neuron in enumerate(nn.output.neurons):
         x = x0 + layer_spacing
         y = y0 + i * neuron_spacing + (len(hidden_pos)-len(nn.output.neurons))*neuron_spacing/2
         output_pos.append((x,y))
-        pygame.draw.circle(surface, (200,200,200), (x,y), 12)
+        radius = 20
+        col = (200,200,200) if not getattr(neuron, 'blocked', False) else (140,80,80)
+        pygame.draw.circle(surface, col, (x,y), radius)
+        # draw blocked marker
+        if getattr(neuron, 'blocked', False):
+            pygame.draw.circle(surface, (255,50,50), (x,y), radius-6, width=2)
         # draw bias number
         bias_text = FONT_SMALL.render(f"{neuron.bias:.2f}", True, (240,240,240))
-        surface.blit(bias_text, (x - bias_text.get_width()//2, y))
+        surface.blit(bias_text, (x - bias_text.get_width()//2, y - bias_text.get_height()//2))
+        # draw output value on the side
+        out_text = FONT_SMALL.render(f"{getattr(neuron, 'output', 0.0):.2f}", True, (0,255,0))
+        surface.blit(out_text, (x + 30, y - out_text.get_height()//2))
 
     # draw weights (hidden -> output)
     
@@ -57,8 +71,35 @@ def draw_nn(surface, nn, origin, layer_spacing=200, neuron_spacing=40):
             col = map_color_for_weight(w)
             width = max(1, int(1 + abs(w) * 3))
             pygame.draw.line(surface, col, (hx+8,hy), (ox-8,oy), width)
-
     # input nodes are not shown — this visualization focuses on hidden/output layers
+
+    # return positions for external click handling
+    return {
+        'hidden_pos': hidden_pos,
+        'output_pos': output_pos,
+        'hidden_radius': 16,
+        'output_radius': 20,
+    }
+
+def get_nn_positions(nn, origin, layer_spacing=200, neuron_spacing=40):
+    """Compute neuron positions without drawing. Returns same structure as draw_nn's return."""
+    x0, y0 = origin
+    hidden_pos = []
+    for i, _ in enumerate(nn.hidden.neurons):
+        x = x0 + 50
+        y = y0 + i * neuron_spacing
+        hidden_pos.append((x, y))
+    output_pos = []
+    for i, _ in enumerate(nn.output.neurons):
+        x = x0 + layer_spacing
+        y = y0 + i * neuron_spacing + (len(hidden_pos)-len(nn.output.neurons))*neuron_spacing/2
+        output_pos.append((x, y))
+    return {
+        'hidden_pos': hidden_pos,
+        'output_pos': output_pos,
+        'hidden_radius': 16,
+        'output_radius': 20,
+    }
 
 def draw_text_info(surface, frame_count, error, output, target, nn_outputs, normalized_target):
     lines = [

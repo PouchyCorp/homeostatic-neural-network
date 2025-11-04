@@ -9,6 +9,8 @@ class Neuron:
         self.weights = [random.uniform(-0.5, 0.5) for _ in range(n_inputs)]
         self.bias = random.uniform(-0.5, 0.5)
         self.output = 0.0
+        # when True, this neuron will not perform adaptations
+        self.blocked = False
         
         self.mutation_step = mutation_step
         self.last_mutation = None
@@ -59,6 +61,9 @@ class Neuron:
 
     def adapt(self, error, target_threshold=0.1):
         """Ashby-style reversible homeostasis."""
+        # do not adapt if neuron is blocked
+        if getattr(self, 'blocked', False):
+            return
         # first iteration: no previous error to compare
         if error < target_threshold:
             return  # no adaptation needed for low error
@@ -140,9 +145,14 @@ pygame.display.set_caption("Homeostatic Neural Network")
 clock = pygame.time.Clock()
 running = True
 
-nn = SimpleNN(n_inputs=2, n_hidden=3, n_outputs=2)
+nn = SimpleNN(n_inputs=2, n_hidden=2, n_outputs=2)
 
 import render
+
+# renderer layout constants
+NN_ORIGIN = (450, 50)
+LAYER_SPACING = 260
+NEURON_SPACING = 70
 
 # UI state: output offsets and swap toggle (inputs are unused)
 output_offsets = [0.0, 0.0]
@@ -194,9 +204,27 @@ while running:
             elif buttons['swap_outputs'].collidepoint(mx, my):
                 swap_outputs = not swap_outputs
             else:
-                # otherwise set the target position to mouse
-                target[0] = mx
-                target[1] = my
+                # check for neuron clicks (use renderer helper to get positions)
+                posinfo = render.get_nn_positions(nn, NN_ORIGIN, layer_spacing=LAYER_SPACING, neuron_spacing=NEURON_SPACING)
+                handled = False
+                for i, (x, y) in enumerate(posinfo['hidden_pos']):
+                    r = posinfo.get('hidden_radius', 16)
+                    if (mx - x) ** 2 + (my - y) ** 2 <= r * r:
+                        # toggle block on corresponding hidden neuron
+                        nn.hidden.neurons[i].blocked = not nn.hidden.neurons[i].blocked
+                        handled = True
+                        break
+                if not handled:
+                    for i, (x, y) in enumerate(posinfo['output_pos']):
+                        r = posinfo.get('output_radius', 20)
+                        if (mx - x) ** 2 + (my - y) ** 2 <= r * r:
+                            nn.output.neurons[i].blocked = not nn.output.neurons[i].blocked
+                            handled = True
+                            break
+                if not handled:
+                    # otherwise set the target position to mouse
+                    target[0] = mx
+                    target[1] = my
         
 
     # inputs are irrelevant for this agent; get base outputs and apply perturbations
@@ -210,9 +238,6 @@ while running:
     if swap_outputs:
         offset_nn_outputs = [offset_nn_outputs[1], offset_nn_outputs[0]]
 
-    # clamp outputs to 0, 1
-    #offset_nn_outputs = [np.clip(o, 0, 1) for o in offset_nn_outputs]
-
     point[0] = WIDTH * offset_nn_outputs[0]
     point[1] = HEIGHT * offset_nn_outputs[1]
 
@@ -223,8 +248,9 @@ while running:
             nn.homeostatic_adjustment(error)
     draw_scene(screen, point, target)
     
-    render.draw_nn(screen, nn, (500, 50))
-    render.draw_text_info(screen, frame_count, error, point, target, raw_nn_output, [target[0]/WIDTH, target[1]/HEIGHT])
+    # draw NN with larger layout and show blocked state; use same layout for positions
+    render.draw_nn(screen, nn, NN_ORIGIN, layer_spacing=LAYER_SPACING, neuron_spacing=NEURON_SPACING)
+    render.draw_text_info(screen, frame_count, error, [point[0], point[1]], target, raw_nn_output, [target[0]/WIDTH, target[1]/HEIGHT])
 
     # draw UI buttons
     render.draw_button(screen, buttons['add_out0'], f"Add +{const_step:.2f} to Out0")
