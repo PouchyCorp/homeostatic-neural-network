@@ -192,7 +192,7 @@ while running:
 
         # if R is pressed, randomize weights and biases
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-            nn = SimpleNN(n_inputs=2, n_hidden=3, n_outputs=2)
+            nn = SimpleNN(n_inputs=2, n_hidden=2, n_outputs=2)
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             mx, my = pygame.mouse.get_pos()
