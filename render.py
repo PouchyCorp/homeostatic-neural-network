@@ -55,7 +55,7 @@ def draw_nn(surface, nn, origin, layer_spacing=200, neuron_spacing=40):
         if getattr(neuron, 'blocked', False):
             pygame.draw.circle(surface, (255,50,50), (x,y), radius-6, width=2)
         # draw bias number
-        bias_text = FONT_SMALL.render(f"{neuron.bias:.2f}", True, (240,240,240))
+        bias_text = FONT_SMALL.render(f"{neuron.bias:.2f}", True, (40,40,40))
         surface.blit(bias_text, (x - bias_text.get_width()//2, y - bias_text.get_height()//2))
         # draw output value on the side
         out_text = FONT_SMALL.render(f"{getattr(neuron, 'output', 0.0):.2f}", True, (0,255,0))
