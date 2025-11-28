@@ -106,21 +106,19 @@ while running:
         
 
     # inputs are irrelevant for this agent; get base outputs and apply perturbations
-    base_inputs = [0.0, 0.0]
-    raw_nn_output = nn.forward(base_inputs)
+    raw_output = nn.forward()
 
     # apply user offsets to outputs
-    offset_nn_outputs = [raw_nn_output[0] + output_offsets[0], raw_nn_output[1] + output_offsets[1]]
+    offset_output = [raw_output[0] + output_offsets[0], raw_output[1] + output_offsets[1]]
 
     # optionally swap both outputs
     if swap_outputs:
-        offset_nn_outputs = [offset_nn_outputs[1], offset_nn_outputs[0]]
+        offset_output = [offset_output[1], offset_output[0]]
 
-    point[0] = WIDTH * offset_nn_outputs[0]
-    point[1] = HEIGHT * offset_nn_outputs[1]
+    point[0] = WIDTH * offset_output[0]
+    point[1] = HEIGHT * offset_output[1]
 
     error = nn.get_error(point, target)
-    # every iteration_rate frames, adjust weights (if adaptation enabled)
     if frame_count % iteration_rate == 0:
         if adapt_enabled:
             nn.homeostatic_adjustment(error)
@@ -128,7 +126,15 @@ while running:
     
     # draw NN with larger layout and show blocked state; use same layout for positions
     render.draw_nn(screen, nn, NN_ORIGIN, layer_spacing=LAYER_SPACING, neuron_spacing=NEURON_SPACING)
-    render.draw_text_info(screen, frame_count, error, [point[0], point[1]], target, raw_nn_output, [target[0]/WIDTH, target[1]/HEIGHT])
+    lines = [
+        f"Frame: {frame_count}",
+        f"Outputs: [{offset_output[0]:.4f}, {offset_output[1]:.4f}]",
+        f"Target: [{target[0]:.4f}, {target[1]:.4f}]",
+        f"Error: {error:.4f}",
+        f"NN Outputs: [{raw_output[0]:.4f}, {raw_output[1]:.4f}]",
+        f"Normalized Target: [{target[0]/WIDTH:.4f}, {target[1]/HEIGHT:.4f}]",
+    ]
+    render.draw_text_info(screen, lines)
 
     # draw UI buttons
     render.draw_button(screen, buttons['add_out0'], f"Add +{const_step:.2f} to Out0")

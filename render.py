@@ -101,15 +101,25 @@ def get_nn_positions(nn, origin, layer_spacing=200, neuron_spacing=40):
         'output_radius': 20,
     }
 
-def draw_text_info(surface, frame_count, error, output, target, nn_outputs, normalized_target):
-    lines = [
-        f"Frame: {frame_count}",
-        f"Outputs: [{output[0]:.4f}, {output[1]:.4f}]",
-        f"Target: [{target[0]:.4f}, {target[1]:.4f}]",
-        f"Error: {error:.4f}",
-        f"NN Outputs: [{nn_outputs[0]:.4f}, {nn_outputs[1]:.4f}]",
-        f"Normalized Target: [{normalized_target[0]:.4f}, {normalized_target[1]:.4f}]",
-    ]
+def draw_text_info(surface, lines):
     for i, line in enumerate(lines):
         text_surf = FONT_SMALL.render(line, True, (240,240,240))
         surface.blit(text_surf, (10, 10 + i * 16))
+        
+def error_graph(surface, errors, rect):
+    """Draw error history graph in given rect area."""
+    if len(errors) < 2:
+        return
+    x, y, w, h = rect
+    max_error = max(errors)
+    min_error = min(errors)
+    range_error = max_error - min_error if max_error != min_error else 1.0
+
+    points = []
+    for i, err in enumerate(errors):
+        px = x + (i / (len(errors) - 1)) * w
+        py = y + h - ((err - min_error) / range_error) * h
+        points.append((px, py))
+    
+    if len(points) >= 2:
+        pygame.draw.lines(surface, (100,200,100), False, points, 2)
