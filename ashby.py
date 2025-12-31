@@ -1,140 +1,179 @@
-# Recreation of Ashby's homeostat with gui
-
 import pygame
 import random
 import math
 
-class Connection:
-    def __init__(self, value=0.0) -> None:
-        self.value = value
+# ---------------- CONFIG ----------------
 
-    def get_color(self):
-        intensity = int(min(max(self.value * 255, 0), 255))
-        return (intensity, intensity, intensity)
+N_UNITS = 4
+DT = 0.05
+FAILURE_THRESHOLD = 40
+
+# asymmetric, constrained ranges (important)
+WEIGHT_RANGE = (-2.5, 1.5)
+BIAS_RANGE = (-1.0, 1.0)
+
+STATE_MIN = -10.0
+STATE_MAX = 10.0
+
+# essential variable viability range
+TARGET_MIN = -1.0
+TARGET_MAX = 1.0
+
+# relay parameters
+RELAY_THRESHOLD = 0.5
+SATURATION = 3.0
+
+# inertia
+INERTIA = 0.9
+
+# ---------------- CORE ----------------
 
 class Unit:
-    def __init__(self, id: int, xy) -> None:
-        self.id = id
+    def __init__(self, idx, xy):
+        self.idx = idx
         self.xy = xy
-        self.value = 0.0
-        self.target = 0.0
-        self.adaptation_rate = 0.01
-        self.weights : dict[int, Connection] = {}
-        self.bias = 0.0
-    
-    def link_unit(self, unit : 'Unit', connection: Connection):
-        self.weights[unit.id] = connection
-        
-    def update_value(self, inputs):
-        total_input = sum(w.value * i for w, i in zip(self.weights.values(), inputs)) + self.bias
-        self.value = math.tanh(total_input)
 
-    def get_error(self):
-        return abs(self.target - self.value)
+        # essential variable (what must stay viable)
+        self.e = random.uniform(-0.5, 0.5)
+
+        # internal signal (free to vary)
+        self.s = random.uniform(-1.0, 1.0)
+        self.ds = 0.0
+
+        self.weights = {
+            j: random.uniform(*WEIGHT_RANGE)
+            for j in range(N_UNITS) if j != idx
+        }
+        self.bias = random.uniform(*BIAS_RANGE)
+
+    def relay(self, x):
+        # crude relay / saturation nonlinearity
+        if x > RELAY_THRESHOLD:
+            return SATURATION
+        elif x < -RELAY_THRESHOLD:
+            return -SATURATION
+        return 0.0
+
+    def integrate(self):
+        # essential variable responds only to internal signal
+        self.e += DT * (0.15 * self.s)
     
-    def is_stable(self):
-        return self.get_error() < 0.1
-    
-    def adapt(self):
-        if not self.is_stable():
-            self.adaptation_rate = min(0.1, self.adaptation_rate * 1.05)
-            for k in self.weights:
-                self.weights[k].value += random.uniform(-self.adaptation_rate, self.adaptation_rate)
-            self.bias += random.uniform(-self.adaptation_rate, self.adaptation_rate)
+        # hard clamp
+        self.e = max(STATE_MIN, min(STATE_MAX, self.e))
+
+
+    def regulate(self, signal_vector):
+        raw = sum(
+            self.weights[j] * signal_vector[j]
+            for j in self.weights
+        ) + self.bias
+
+        # asymmetric relay with dead zone
+        if raw > 0.6:
+            target = 2.5
+        elif raw < -0.3:
+            target = -1.8
         else:
-            self.adaptation_rate = max(0.001, self.adaptation_rate * 0.95)
+            target = 0.0
+
+        self.ds = INERTIA * self.ds + (1 - INERTIA) * target
+
+
+    def viable(self):
+        return TARGET_MIN <= self.e <= TARGET_MAX
+
+    def reconfigure_one_parameter(self):
+        # Ashby-style: change ONE thing, blindly
+        choice = random.choice(["weight", "bias"])
+
+        if choice == "bias":
+            self.bias = random.uniform(*BIAS_RANGE)
+        else:
+            j = random.choice(list(self.weights.keys()))
+            self.weights[j] = random.uniform(*WEIGHT_RANGE)
+
+    def disturb(self):
+        # external disturbance hits essential variable only
+        self.e += random.uniform(-1.0, 1.0)
+
 
 class Homeostat:
-    def __init__(self, n_units: int):
-        self.units = [Unit(i, (100 + (i % 2) * 300, 100 + (i // 2) * 300)) for i in range(n_units)]
-
-
-        self.connections = []
-
-        connected : set[tuple[int, int]] = set()
-        for unit in self.units:
-            for other_unit in self.units:
-                if (unit.id, other_unit.id) in connected or (other_unit.id, unit.id) in connected or unit.id == other_unit.id:
-                    continue
-                connection = Connection(random.uniform(-1.0, 1.0))
-                unit.link_unit(other_unit, connection)
-                other_unit.link_unit(unit, connection)
-                self.connections.append((unit, other_unit, connection))
-                connected.add((unit.id, other_unit.id))
+    def __init__(self):
+        self.units = [
+            Unit(i, (200 + (i % 2) * 300, 150 + (i // 2) * 300))
+            for i in range(N_UNITS)
+        ]
+        self.failure_counter = 0
 
     def step(self):
-        inputs = [unit.value for unit in self.units]
-        for unit in self.units:
-            unit.update_value(inputs)
-    
+        signals = [u.s for u in self.units]
+
+        for u in self.units:
+            u.regulate(signals)
+
+        for u in self.units:
+            u.integrate()
+
+        if not self.viable():
+            self.failure_counter += 1
+        else:
+            self.failure_counter = 0
+
+        if self.failure_counter >= FAILURE_THRESHOLD:
+            self.adapt()
+
+    def viable(self):
+        return all(u.viable() for u in self.units)
+
     def adapt(self):
-        for unit in self.units:
-            unit.adapt()
-    
-    def get_overall_error(self):
-        return sum(unit.get_error() for unit in self.units) / len(self.units)
-    
-    def draw(self, surface, origin):
+        # random unit, single blind change
+        random.choice(self.units).reconfigure_one_parameter()
+        self.failure_counter = 0
 
-        # draw line connections between units depending on weights
-        for unit_a, unit_b, connection in self.connections:
-            x1, y1 = unit_a.xy
-            x2, y2 = unit_b.xy
-            color = connection.get_color()
-            pygame.draw.line(surface, (128, 128, 128), (x1, y1), (x2, y2), 7)
-            pygame.draw.line(surface, color, (x1, y1), (x2, y2), 5)
-            two_third = ( (x1 * 2 + x2) // 3, (y1 * 2 + y2) // 3 )
-            font = pygame.font.SysFont(None, 24)
-            text = font.render(f"{connection.value:.2f}", True, (255, 255, 255))
-            surface.blit(text, (two_third[0] - 15, two_third[1] - 10))
-            
+# ---------------- GUI ----------------
 
-
-        for i, unit in enumerate(self.units):
-            x, y = unit.xy
-            color = (0, 255, 0) if unit.is_stable() else (255, 0, 0)
-            pygame.draw.circle(surface, color, (x, y), 50)
-            font = pygame.font.SysFont(None, 24)
-            text = font.render(f"{unit.value:.2f}", True, (255, 255, 255))
-            bias = font.render(f"B:{unit.bias:.2f}", True, (255, 255, 255))
-            surface.blit(bias, (x - 15, y + 10))
-            surface.blit(text, (x - 15, y - 10))
-
-    def click_unit(self, pos):
-        for unit in self.units:
-            x, y = unit.xy
-            if (pos[0] - x) ** 2 + (pos[1] - y) ** 2 <= 30 ** 2:
-                unit.value = random.uniform(0.0, 1.0)
-
-
-# Pygame setup
-pygame.init()
-WIDTH, HEIGHT = 800, 600
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Ashby's Homeostat Simulation")
-clock = pygame.time.Clock()
-homeostat = Homeostat(n_units=4)
+homeostat = Homeostat()
 running = True
+"""
+pygame.init()
+screen = pygame.display.set_mode((800, 600))
+pygame.display.set_caption("Ashby Homeostat")
+clock = pygame.time.Clock()
+font = pygame.font.SysFont(None, 22)
+
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:  # Left click
-                homeostat.click_unit(event.pos)
+            for u in homeostat.units:
+                x, y = u.xy
+                if (event.pos[0] - x)**2 + (event.pos[1] - y)**2 <= 40**2:
+                    u.disturb()
 
     homeostat.step()
-    homeostat.adapt()
 
     screen.fill((0, 0, 0))
-    homeostat.draw(screen, (100, 100))
+    for u in homeostat.units:
+        color = (0, 180, 0) if u.viable() else (180, 0, 0)
+        pygame.draw.circle(screen, color, u.xy, 40)
 
-    overall_error = homeostat.get_overall_error()
-    font = pygame.font.SysFont(None, 36)
-    error_text = font.render(f"Overall Error: {overall_error:.4f}", True, (255, 255, 255))
-    screen.blit(error_text, (10, 10))
+        txt = font.render(f"e={u.e:.2f}", True, (255, 255, 255))
+        screen.blit(txt, (u.xy[0] - 28, u.xy[1] - 10))
 
     pygame.display.flip()
-    clock.tick(5)
-    
-    
+    clock.tick(60)
+
+pygame.quit()
+"""
+i = 0
+while running:
+    i += 1
+    homeostat.step()
+    # For demonstration purposes, we will just run the simulation without GUI.
+    # You can add print statements or logging here to observe the state if needed.
+    if i%1000 == 0:
+        print(f"Step {i}:")
+        for idx, u in enumerate(homeostat.units):
+            print(f"  Unit {idx}: e={u.e:.2f}, s={u.s:.2f}, is viable: {u.viable()}")
