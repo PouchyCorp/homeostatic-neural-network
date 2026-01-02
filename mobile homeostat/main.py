@@ -10,8 +10,6 @@ class Homeostat:
     # ---------------- constants ----------------
 
     UPDATE_RATE = 25
-    MOTOR_FORCE = 300
-    MAX_STABLE_TRIALS = 20
 
     SENSOR_INTERVAL = 1.0 / 3.0
     DT = 1.0 / UPDATE_RATE
@@ -109,28 +107,6 @@ class Homeostat:
             result[j] = acc
         return result
 
-    # ---------------- relay logic ----------------
-
-    def _reset_unit(self, unit_idx):
-        for i in range(self.num_inputs):
-            idx = i * self.num_units + unit_idx
-            if self.weight_mutable[idx]:
-                self.weights[idx] = random.uniform(self.lower_bound, self.upper_bound)
-
-        self.needle_position[unit_idx] = 0.0
-        self.needle_velocity[unit_idx] = 0.0
-        self.inputs[unit_idx] = 0.0
-
-    def check_relays(self):
-        triggered = False
-        for i in range(self.num_units):
-            if self.relay_enabled[i]:
-                y = self.needle_position[i]
-                if y <= self.lower_bound or y >= self.upper_bound:
-                    self._reset_unit(i)
-                    triggered = True
-        return triggered
-
     # ---------------- geometry helpers ----------------
 
     @staticmethod
@@ -163,43 +139,33 @@ class Homeostat:
         for i in range(self.num_units):
             self.inputs[i] = self.needle_position[i]
 
-        # relay check (slow)
-        if self.sensor_counter == 0:
-            self.trials += 1
-            self.stable_trials += 1
+        return self.inputs
+    
+    def draw_state(self):
+        lines = [
+        f"Needle Positions: {self.needle_position}",
+        f"Needle Velocities: {self.needle_velocity}",
+        f"Weights: {self.weights}",
+        f"States: {self.inputs[:self.num_units]}",
+        f"Right Eye, Left Eye : {self.inputs[self.num_units]}, {self.inputs[self.num_units +1]}",
+        f"Trials: {self.trials}, Stable Trials: {self.stable_trials}"
+        ]
 
-            if self.check_relays():
-                self.stable_trials = 0
+        font = pygame.font.SysFont("Arial", 18)
+        y_offset = 10
+        for l in lines:
+            text_surface = font.render(l, True, (255, 255, 255))
+            screen.blit(text_surface, (10, y_offset))
+            y_offset += 22
 
-            self.sensor_counter = self.sensor_counter_max
-        else:
-            self.sensor_counter -= 1
 
-        # motion
-        left_speed = self.MOTOR_FORCE * self.inputs[0]
-        right_speed = self.MOTOR_FORCE * self.inputs[1]
-
-        angular_change = (right_speed - left_speed) / (2 * world_width)
-        forward_speed = (right_speed + left_speed) / 2
-
-        heading = (heading + angular_change * self.DT) % TAU
-
-        dx = forward_speed * math.cos(-heading)
-        dy = forward_speed * math.sin(-heading)
-
-        position = (
-            position[0] + dx * self.DT,
-            position[1] + dy * self.DT,
-        )
-
-        return position, heading
 
 
 # Initialize pygame
 pygame.init()
 
 # Set up display
-WIDTH, HEIGHT = 1920, 1080
+WIDTH, HEIGHT = 1000, 1000
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Ashby Mobile Homeostat")
 
@@ -212,16 +178,17 @@ running = True
 
 car = Vehicle()
 car.velocity = 2.0  # Set a constant velocity for the car
-car.xy = (WIDTH//2 + 10, HEIGHT//2)
+car.xy = (WIDTH//2 + 100, HEIGHT//2)
 
-light = Light((WIDTH//2 - 100, HEIGHT//2), intensity=200.0)
+light = Light((WIDTH//2, HEIGHT//2), intensity=200.0)
 
 h = Homeostat()
 
 
 while running:  
-    clock.tick(150)
+    clock.tick(60)
 
+    dt = clock.get_time() / 1000.0
     # Clear screen
     screen.fill((0,0,0))
 
@@ -232,14 +199,14 @@ while running:
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             running = False
 
-    # Update the car's position
-    car.xy, car.theta = h.update(car.xy, car.theta, light.position, world_width=100.0)
+    h.update(car.xy, car.theta, light.position, world_width=WIDTH)
     
-    
-    # Draw the car
+    car.tick([-0.01, 0.01], dt)
     car.draw(screen)
     # Draw the light
     light.draw(screen, car)
+
+    h.draw_state()
     
     pygame.display.flip()
 

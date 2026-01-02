@@ -4,11 +4,12 @@ import pygame
 from light import Light
 
 class Vehicle:
+    MOTOR_FORCE = 300
+    SIZE = (40, 20)
     def __init__(self) -> None:
         self.xy = (0,0)
         self.theta = 0.0  # angle in radians
         self.velocity = 0.0  # speed
-        self.size = (40, 20)  # width, height
     @property
     def xy(self):
         return (self._x, self._y)
@@ -33,8 +34,9 @@ class Vehicle:
         return pygame.math.Vector2(math.cos(self.theta), math.sin(self.theta)).normalize()
 
     def draw(self, screen):
-        empty_surf = pygame.Surface(self.size, pygame.SRCALPHA)
-        pygame.draw.rect(empty_surf, (255,0,0), (0,0,self.size[0], self.size[1]))
+
+        empty_surf = pygame.Surface(self.SIZE, pygame.SRCALPHA)
+        pygame.draw.rect(empty_surf, (255,0,0), (0,0,self.SIZE[0], self.SIZE[1]))
         rotated_surf = pygame.transform.rotate(empty_surf, -math.degrees(self.theta))
         rotated_surf_center = (rotated_surf.get_width()//2, rotated_surf.get_height()//2)
         screen.blit(rotated_surf, (self.x - rotated_surf_center[0], self.y - rotated_surf_center[1]))
@@ -53,7 +55,19 @@ class Vehicle:
         end_y = self.y + self.direction_vector.y * line_length
         pygame.draw.line(screen, (0,255,0), (self.x, self.y), (end_x, end_y), 2)
 
-    def tick(self):
+    def tick(self, homeostat_output, dt):
+
+        left_speed = self.MOTOR_FORCE * homeostat_output[0]
+        right_speed = self.MOTOR_FORCE * homeostat_output[1]
+
+        angular_change = (right_speed - left_speed) * dt * 0.01
+        self.velocity = (right_speed + left_speed) / 2
+        self.velocity *= dt
+
+        #print(f"Velocity: {self.velocity}, dt : {dt}, angular change : {angular_change}, angle : {math.degrees(self.theta)}")
+
+        self.theta = (self.theta + angular_change)
+
         dx = self.velocity * self.direction_vector.x
         dy = self.velocity * self.direction_vector.y
         self.x += dx
@@ -74,7 +88,7 @@ class Vehicle:
     
     def get_polygon(self) -> list[tuple[float, float]]:
         """returns the 4 corner points of the rotated car as a list of (x,y) tuples"""
-        w, h = self.size
+        w, h = self.SIZE
         corners = [
             pygame.math.Vector2(-w/2, -h/2),
             pygame.math.Vector2(w/2, -h/2),

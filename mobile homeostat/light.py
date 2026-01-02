@@ -27,7 +27,7 @@ class Light:
                      int(self.position[1] - self.light_sprite.get_height() // 2))
         light_surface_copy = self.light_sprite.copy()
 
-        """#get rotated car polygon
+        #get rotated car polygon
         car_polygon = car.get_polygon()
 
         # offset car polygon points relative to light position
@@ -38,7 +38,9 @@ class Light:
         for point in car_polygon:
 
             
-            direction = pygame.math.Vector2(point[0] - self.position[0], point[1] - self.position[1]).normalize()
+            # Center of the light sprite in local coordinates
+            center = pygame.math.Vector2(self.light_sprite.get_width() // 2, self.light_sprite.get_height() // 2)
+            direction = pygame.math.Vector2(point[0] - center.x, point[1] - center.y).normalize()
             far_point = (point[0] + direction.x * 2000, point[1] + direction.y * 2000)
 
             shadow_polygon.append(far_point)
@@ -54,9 +56,8 @@ class Light:
         shadow_polygon.sort(key=lambda p: math.atan2(p[1]-centroid.y, p[0]-centroid.x))
         
         pygame.draw.polygon(light_surface_copy, (0,0,0,0), shadow_polygon)
-        pygame.draw.polygon(light_surface_copy, (0,0,0,0), car_polygon)"""
+        pygame.draw.polygon(light_surface_copy, (0,0,0,0), car_polygon)
         screen.blit(light_surface_copy, light_pos)
 
         # draw debug light center
         pygame.draw.circle(screen, (0,255,0), (int(self.position[0]), int(self.position[1])), 10)
-    
