@@ -104,8 +104,6 @@ if __name__ == "__main__":
         render.draw_text_info(screen, lines)
         
         render.error_graph(screen, errors[:], (10, 400, 200, 150))
-        
-        render.draw_nn(screen, homeostat, (550, 50), layer_spacing=120, neuron_spacing=50)
             
         pygame.display.flip()
         clock.tick(60)

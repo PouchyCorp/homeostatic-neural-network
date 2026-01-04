@@ -1,3 +1,4 @@
+from re import match
 import pygame
 import sys
 import numpy as np
@@ -9,13 +10,15 @@ TAU = 2 * math.pi
 class Homeostat:
     # ---------------- constants ----------------
 
-    UPDATE_RATE = 25
+    UPDATE_RATE = 5
 
     SENSOR_INTERVAL = 1.0 / 3.0
     DT = 1.0 / UPDATE_RATE
 
     NUM_UNITS = 2
     NUM_PARAMETERS = 3
+    
+    STABILITY_THRESHOLD = 3
 
     # ---------------- init ----------------
 
@@ -45,8 +48,8 @@ class Homeostat:
         self.sensor_counter_max = int(self.UPDATE_RATE / self.SENSOR_INTERVAL)
         self.sensor_counter = self.sensor_counter_max
 
-        self.trials = 0
         self.stable_trials = 0
+        self.unstable_trials = 0
 
         self._configure_units()
         self._randomize_weights(self.lower_bound, self.upper_bound)
@@ -95,6 +98,29 @@ class Homeostat:
             self.needle_velocity[i] += dz * self.DT
 
             self.needle_position[i] = self._saturate(self.needle_position[i])
+    
+    def _reconfig_unit(self, unit_idx):
+        for input_idx in range(self.num_inputs):
+            w_idx = input_idx * self.num_units + unit_idx
+            if self.weight_mutable[w_idx]:
+                self.weights[w_idx] = random.uniform(
+                    self.lower_bound,
+                    self.upper_bound
+                )
+
+        # reset unit state
+        self.needle_position[unit_idx] = 0.0
+        self.needle_velocity[unit_idx] = 0.0
+        self.inputs[unit_idx] = 0.0
+    
+    def reconfig_relays(self):
+
+        for i in range(self.num_units):
+            if not self.relay_enabled[i]:
+                continue
+            
+            self._reconfig_unit(i)
+
 
     # ---------------- matrix multiply ----------------
 
@@ -107,7 +133,7 @@ class Homeostat:
             result[j] = acc
         return result
 
-    # ---------------- geometry helpers ----------------
+    # ---------------- helpers ----------------
 
     @staticmethod
     def angle_between(p1, p2):
@@ -118,6 +144,28 @@ class Homeostat:
         dx = p2[0] - p1[0]
         dy = p2[1] - p1[1]
         return math.sqrt(dx * dx + dy * dy)
+    
+    @staticmethod
+    def read_log():
+        try :
+            with open("best_performer.txt", "r") as file:
+                #read first line to get score
+                score_line = file.readline().strip()
+                try:
+                    score = int(score_line)
+                except ValueError:
+                    print("warning, log invalid")
+                    score = 0
+        except FileNotFoundError:
+            score = 0
+        return score
+    
+    @staticmethod
+    def overwrite_log(score, homeostat):
+        print(f"New best performer with score: {score}")
+        with open("best_performer.txt", "w") as file:
+            file.write(str(score) + "\n")
+            file.write(str(homeostat.weights) + "\n") 
 
     # ---------------- main update ----------------
 
@@ -127,28 +175,48 @@ class Homeostat:
         left_signal = math.cos(theta - heading - self.left_eye_angle)
         right_signal = math.cos(theta - heading - self.right_eye_angle)
 
-        distance_signal = self.distance(position, target) / (world_width / 2)
+        self.distance_signal = self.distance(position, target) / (world_width/2)
 
         self.inputs[self.num_units] = right_signal if self.crossed_inputs else left_signal
         self.inputs[self.num_units + 1] = left_signal if self.crossed_inputs else right_signal
-        self.inputs[self.num_units + 2] = 1.0 if distance_signal > 1.0 else 0.0
-
+        self.inputs[self.num_units + 2] = min(self.distance_signal, 1.0)
         unit_inputs = self.compute_unit_inputs()
         self.integrate_units(unit_inputs)
 
         for i in range(self.num_units):
             self.inputs[i] = self.needle_position[i]
+            
+        if self.sensor_counter == 0:
+            self.stable_trials += 1
+            if self.distance_signal > 0.5:
+                self.unstable_trials += 1
+
+            if self.unstable_trials > self.STABILITY_THRESHOLD:
+                self.reconfig_relays()
+                
+                # keep track of best performer
+                if self.stable_trials > 20:
+                    res = self.read_log()
+                    if self.stable_trials > res:
+                        self.overwrite_log(self.stable_trials, self)
+
+                self.stable_trials = 0
+                self.unstable_trials = 0  # instability detected
+
+            self.sensor_counter = self.sensor_counter_max
+        else:
+            self.sensor_counter -= 1
 
         return self.inputs
     
     def draw_state(self):
         lines = [
-        f"Needle Positions: {self.needle_position}",
         f"Needle Velocities: {self.needle_velocity}",
-        f"Weights: {self.weights}",
+        f"Distance: {self.distance_signal}",
+        f"Weights: {self.weights[4:]}",
         f"States: {self.inputs[:self.num_units]}",
         f"Right Eye, Left Eye : {self.inputs[self.num_units]}, {self.inputs[self.num_units +1]}",
-        f"Trials: {self.trials}, Stable Trials: {self.stable_trials}"
+        f"Stable Trials: {self.stable_trials}, Unstable Trials: {self.unstable_trials}"
         ]
 
         font = pygame.font.SysFont("Arial", 18)
@@ -177,34 +245,58 @@ clock = pygame.time.Clock()
 running = True
 
 car = Vehicle()
-car.velocity = 2.0  # Set a constant velocity for the car
 car.xy = (WIDTH//2 + 100, HEIGHT//2)
 
 light = Light((WIDTH//2, HEIGHT//2), intensity=200.0)
 
 h = Homeostat()
 
+def reset():
+    car.xy = (WIDTH//2 + 100, HEIGHT//2)
+    car.theta = 0.0
+    h.stable_trials = 0
+    h.unstable_trials = 0
+    h.reconfig_relays()
 
-while running:  
+while running:
     clock.tick(60)
 
     dt = clock.get_time() / 1000.0
     # Clear screen
     screen.fill((0,0,0))
 
-    # Handle events -- keep only quit/escape here
+    # Handle events
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             running = False
+            
+        #press R to reset car
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+            reset()
+        
+        if event.type == pygame.KEYDOWN:
+            match event.key:
+                case pygame.K_KP0:
+                    reset()
+                    h.weights = [-0.5, 0.0, 0.0, -0.5, -0.096187115, 2.8920174E-4, 0.12929058, 0.07791245, 1.0, 1.0]
+                case pygame.K_KP1:
+                    reset()
+                    h.weights = [-0.5, 0.0, 0.0, -0.5, -0.2475989590137111, 0.7036377667271261, -0.8834543457791277, 0.1790876847115872, 1.0, 1.0]
 
     h.update(car.xy, car.theta, light.position, world_width=WIDTH)
     
-    car.tick([-0.01, 0.01], dt)
+    if h.distance_signal > 2:
+        reset()
+        h.stable_trials = 0
+    
+    car.tick(h.inputs[:2], dt)
     car.draw(screen)
     # Draw the light
     light.draw(screen, car)
+    #draw faint viability circle
+    pygame.draw.circle(screen, (50, 50, 50, 100), (int(light.position[0]), int(light.position[1])), int(WIDTH/4), 1)
 
     h.draw_state()
     

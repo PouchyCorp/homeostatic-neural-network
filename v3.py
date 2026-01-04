@@ -131,7 +131,7 @@ if __name__ == "__main__":
         ]
         render.draw_text_info(screen, lines)
         
-        render.error_graph(screen, errors[-300:], (10, 400, 200, 50))
+        render.error_graph(screen, errors[:], (10, 400, 200, 50))
         pygame.display.flip()
         clock.tick(60)
 

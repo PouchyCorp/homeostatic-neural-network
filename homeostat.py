@@ -13,6 +13,7 @@ class Neuron:
         # when True, this neuron will not perform adaptations
         self.blocked = False
         
+        self.mutation_step_default = mutation_step
         self.mutation_step = mutation_step
         self.last_mutation = None
         # persistent mutation direction: +1 means increase, -1 means decrease
@@ -31,6 +32,12 @@ class Neuron:
 
     def _mutate(self, error, minmaxerror : tuple):
         """Store a reversible mutation."""
+        #small chance for a violent mutation
+        if random.random() < 0.01:
+            self.mutation_step *= 100
+        else:
+            self.mutation_step = self.mutation_step_default
+        
         idx = random.randrange(len(self.weights) + 1)
         # Ensure we mutate in the current persistent direction (sign)
         sign = self.mutation_direction if self.mutation_direction in (1, -1) else random.choice([-1, 1])

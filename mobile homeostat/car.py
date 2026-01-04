@@ -4,7 +4,7 @@ import pygame
 from light import Light
 
 class Vehicle:
-    MOTOR_FORCE = 300
+    MOTOR_FORCE = 50
     SIZE = (40, 20)
     def __init__(self) -> None:
         self.xy = (0,0)
@@ -54,14 +54,21 @@ class Vehicle:
         end_x = self.x + self.direction_vector.x * line_length
         end_y = self.y + self.direction_vector.y * line_length
         pygame.draw.line(screen, (0,255,0), (self.x, self.y), (end_x, end_y), 2)
+        
+        #draw left and right motor values
+        font = pygame.font.SysFont("Arial", 10)
+        left_text = font.render(f"{self.left_speed:.2f}", True, (255, 255, 255))
+        right_text = font.render(f"{self.right_speed:.2f}", True, (255, 255, 255))
+        screen.blit(left_text, (int(left_sensor_pos[0]) - left_text.get_width()/2, int(left_sensor_pos[1]) - left_text.get_height()/2))
+        screen.blit(right_text, (int(right_sensor_pos[0]) - right_text.get_width()/2, int(right_sensor_pos[1]) - right_text.get_height()/2))
 
     def tick(self, homeostat_output, dt):
 
-        left_speed = self.MOTOR_FORCE * homeostat_output[0]
-        right_speed = self.MOTOR_FORCE * homeostat_output[1]
+        self.left_speed = self.MOTOR_FORCE * homeostat_output[0]
+        self.right_speed = self.MOTOR_FORCE * homeostat_output[1]
 
-        angular_change = (right_speed - left_speed) * dt * 0.01
-        self.velocity = (right_speed + left_speed) / 2
+        angular_change = (self.right_speed - self.left_speed) * dt * 0.01
+        self.velocity = (self.right_speed + self.left_speed) / 2
         self.velocity *= dt
 
         #print(f"Velocity: {self.velocity}, dt : {dt}, angular change : {angular_change}, angle : {math.degrees(self.theta)}")
