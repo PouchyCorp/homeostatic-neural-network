@@ -23,7 +23,7 @@ pygame.display.set_caption("Homeostatic Neural Network")
 clock = pygame.time.Clock()
 running = True
 
-nn = Homeostat(n_hidden=2, n_outputs=2)
+h = Homeostat(n_hidden=2, n_outputs=2, violent_mutation_chance=0)
 
 import render
 
@@ -70,7 +70,7 @@ while running:
 
         # if R is pressed, randomize weights and biases
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-            nn = Homeostat(n_hidden=2, n_outputs=2)
+            h = Homeostat(n_hidden=2, n_outputs=2)
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             mx, my = pygame.mouse.get_pos()
@@ -83,20 +83,20 @@ while running:
                 swap_outputs = not swap_outputs
             else:
                 # check for neuron clicks (use renderer helper to get positions)
-                posinfo = render.get_nn_positions(nn, NN_ORIGIN, layer_spacing=LAYER_SPACING, neuron_spacing=NEURON_SPACING)
+                posinfo = render.get_nn_positions(h, NN_ORIGIN, layer_spacing=LAYER_SPACING, neuron_spacing=NEURON_SPACING)
                 handled = False
                 for i, (x, y) in enumerate(posinfo['hidden_pos']):
                     r = posinfo.get('hidden_radius', 16)
                     if (mx - x) ** 2 + (my - y) ** 2 <= r * r:
                         # toggle block on corresponding hidden neuron
-                        nn.hidden.neurons[i].blocked = not nn.hidden.neurons[i].blocked
+                        h.hidden.neurons[i].blocked = not h.hidden.neurons[i].blocked
                         handled = True
                         break
                 if not handled:
                     for i, (x, y) in enumerate(posinfo['output_pos']):
                         r = posinfo.get('output_radius', 20)
                         if (mx - x) ** 2 + (my - y) ** 2 <= r * r:
-                            nn.output.neurons[i].blocked = not nn.output.neurons[i].blocked
+                            h.output.neurons[i].blocked = not h.output.neurons[i].blocked
                             handled = True
                             break
                 if not handled:
@@ -106,7 +106,7 @@ while running:
         
 
     # inputs are irrelevant for this agent; get base outputs and apply perturbations
-    raw_output = nn.forward()
+    raw_output = h.forward()
 
     # apply user offsets to outputs
     offset_output = [raw_output[0] + output_offsets[0], raw_output[1] + output_offsets[1]]
@@ -118,14 +118,14 @@ while running:
     point[0] = WIDTH * offset_output[0]
     point[1] = HEIGHT * offset_output[1]
 
-    error = nn.get_error(point, target)
+    error = h.get_error(point, target)
     if frame_count % iteration_rate == 0:
         if adapt_enabled:
-            nn.homeostatic_adjustment(error)
+            h.homeostatic_adjustment(error)
     draw_scene(screen, point, target)
     
     # draw NN with larger layout and show blocked state; use same layout for positions
-    render.draw_nn(screen, nn, NN_ORIGIN, layer_spacing=LAYER_SPACING, neuron_spacing=NEURON_SPACING)
+    render.draw_nn(screen, h, NN_ORIGIN, layer_spacing=LAYER_SPACING, neuron_spacing=NEURON_SPACING)
     lines = [
         f"Frame: {frame_count}",
         f"Outputs: [{offset_output[0]:.4f}, {offset_output[1]:.4f}]",

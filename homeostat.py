@@ -2,7 +2,7 @@ import random
 import math
 
 class Neuron:
-    def __init__(self, n_inputs, mutation_step=0.005, improvement_tolerance=1.0, zero_init=False, error_scaling=False):
+    def __init__(self, n_inputs, mutation_step=0.005, improvement_tolerance=1.0, zero_init=False, error_scaling=False, violent_mutation_chance=0.01):
         if zero_init:
             self.weights = [0.0 for _ in range(n_inputs)]
             self.bias = 0.0
@@ -25,6 +25,8 @@ class Neuron:
         self.prev_error = None
         self.error_scaling = error_scaling
 
+        self.violent_mutation_chance = violent_mutation_chance
+
     def activate(self):
         z = sum(w for w in self.weights) + self.bias
         self.output = math.tanh(z)
@@ -33,7 +35,7 @@ class Neuron:
     def _mutate(self, error, minmaxerror : tuple):
         """Store a reversible mutation."""
         #small chance for a violent mutation
-        if random.random() < 0.01:
+        if random.random() < self.violent_mutation_chance:
             self.mutation_step *= 100
         else:
             self.mutation_step = self.mutation_step_default
@@ -118,16 +120,16 @@ class Neuron:
 
 
 class Layer:
-    def __init__(self, n_neurons, n_inputs, zero_init=False, error_scaling=False):
-        self.neurons = [Neuron(n_inputs, zero_init=zero_init, error_scaling=error_scaling) for _ in range(n_neurons)]
+    def __init__(self, n_neurons, n_inputs, zero_init=False, error_scaling=False, violent_mutation_chance=0.01):
+        self.neurons = [Neuron(n_inputs, zero_init=zero_init, error_scaling=error_scaling, violent_mutation_chance=violent_mutation_chance) for _ in range(n_neurons)]
 
     def forward(self):
         return [n.activate() for n in self.neurons]
 
 class Homeostat:
-    def __init__(self, n_hidden, n_outputs, zero_init=False, error_scaling = False):
-        self.hidden = Layer(n_hidden, 2 , zero_init=zero_init, error_scaling=error_scaling)
-        self.output = Layer(n_outputs, n_hidden, zero_init=zero_init, error_scaling=error_scaling)
+    def __init__(self, n_hidden, n_outputs, zero_init=False, error_scaling = False, violent_mutation_chance=0.01):
+        self.hidden = Layer(n_hidden, 2 , zero_init=zero_init, error_scaling=error_scaling, violent_mutation_chance=violent_mutation_chance)
+        self.output = Layer(n_outputs, n_hidden, zero_init=zero_init, error_scaling=error_scaling, violent_mutation_chance=violent_mutation_chance)
 
     def forward(self):
         h = self.hidden.forward()
